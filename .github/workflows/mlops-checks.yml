@@ -1,0 +1,130 @@
+name: MLOps Quality Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  # Run daily at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  data-drift-check:
+    name: Data Drift Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      - name: Run data drift checks
+        run: |
+          cd 4_automation
+          python run_ci_check.py
+        continue-on-error: false
+      
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: drift-test-results
+          path: 4_automation/*.json
+
+  model-performance-check:
+    name: Model Performance Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      - name: Generate performance report
+        run: |
+          cd 2_model_performance
+          python monitor_model_performance.py
+      
+      - name: Upload performance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report
+          path: 2_model_performance/*.html
+
+  # Optional: LLM monitoring (requires API key as secret)
+  llm-quality-check:
+    name: LLM Quality Evaluation
+    runs-on: ubuntu-latest
+    if: false  # Enable by setting to true and adding OPENAI_API_KEY secret
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      - name: Run LLM quality checks
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          cd 3_llm_monitoring
+          python monitor_llm_judge.py
+      
+      - name: Upload LLM report
+        uses: actions/upload-artifact@v3
+        with:
+          name: llm-quality-report
+          path: 3_llm_monitoring/*.html
+
+  notify-on-failure:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [data-drift-check, model-performance-check]
+    if: failure()
+    
+    steps:
+      - name: Send Slack notification
+        if: false  # Enable by setting to true and adding SLACK_WEBHOOK secret
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -H 'Content-Type: application/json' \
+            -d '{"text":"🚨 MLOps Quality Check Failed! Check the Actions tab for details."}'
+      
+      - name: Create issue on failure
+        if: false  # Enable by setting to true
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 MLOps Check Failed',
+              body: 'Automated MLOps quality checks have failed. Please review the workflow run.',
+              labels: ['mlops', 'quality-gate', 'automated']
+            })
+
