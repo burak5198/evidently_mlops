@@ -1,25 +1,22 @@
-name: MLOps Quality Checks
+name: Evidently Monitoring Examples
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
-  # Run daily at 2 AM UTC
-  schedule:
-    - cron: '0 2 * * *'
+    branches: [ main, master ]
 
 jobs:
-  data-drift-check:
-    name: Data Drift Detection
+  data-drift-example:
+    name: Run Data Drift Example
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
@@ -28,103 +25,72 @@ jobs:
         run: |
           pip install -r requirements.txt
       
-      - name: Run data drift checks
+      - name: Run data drift detection
         run: |
-          cd 4_automation
-          python run_ci_check.py
-        continue-on-error: false
+          cd 1_data_drift
+          python monitor_data_drift.py
       
-      - name: Upload test results
-        if: failure()
-        uses: actions/upload-artifact@v3
+      - name: Upload drift report
+        uses: actions/upload-artifact@v4
         with:
-          name: drift-test-results
-          path: 4_automation/*.json
+          name: data-drift-report
+          path: 1_data_drift/*.html
 
-  model-performance-check:
-    name: Model Performance Validation
+  model-performance-example:
+    name: Run Model Performance Example
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip'
       
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
       
-      - name: Generate performance report
+      - name: Run performance monitoring
         run: |
           cd 2_model_performance
           python monitor_model_performance.py
       
       - name: Upload performance report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: performance-report
           path: 2_model_performance/*.html
 
-  # Optional: LLM monitoring (requires API key as secret)
-  llm-quality-check:
-    name: LLM Quality Evaluation
+  llm-monitoring-example:
+    name: Run LLM Monitoring Example
     runs-on: ubuntu-latest
-    if: false  # Enable by setting to true and adding OPENAI_API_KEY secret
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip'
       
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
       
-      - name: Run LLM quality checks
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - name: Run LLM quality monitoring (without API key)
         run: |
           cd 3_llm_monitoring
           python monitor_llm_judge.py
       
       - name: Upload LLM report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: llm-quality-report
+          name: llm-monitoring-report
           path: 3_llm_monitoring/*.html
-
-  notify-on-failure:
-    name: Send Notifications
-    runs-on: ubuntu-latest
-    needs: [data-drift-check, model-performance-check]
-    if: failure()
-    
-    steps:
-      - name: Send Slack notification
-        if: false  # Enable by setting to true and adding SLACK_WEBHOOK secret
-        run: |
-          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
-            -H 'Content-Type: application/json' \
-            -d '{"text":"🚨 MLOps Quality Check Failed! Check the Actions tab for details."}'
-      
-      - name: Create issue on failure
-        if: false  # Enable by setting to true
-        uses: actions/github-script@v6
-        with:
-          script: |
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: '🚨 MLOps Check Failed',
-              body: 'Automated MLOps quality checks have failed. Please review the workflow run.',
-              labels: ['mlops', 'quality-gate', 'automated']
-            })
 
